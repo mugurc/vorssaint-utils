@@ -3,8 +3,9 @@
 # Copyright (C) 2026 Vorssaint
 
 # Cleanly removes Vorssaint and every piece of system state it created:
-# the login item, TCC permissions, preferences, saved state and (if present)
-# the password-free closed-lid sudoers rule. Leaves no dead entries behind.
+# the fan helper daemon, the login item, TCC permissions, preferences, saved
+# state, the app's own data folder and (if present) the password-free
+# closed-lid sudoers rule. Leaves no dead entries behind.
 # Also clears the pre-rename "Vorssaint Utils.app" if it is still around.
 set -uo pipefail
 
@@ -30,11 +31,15 @@ done
 echo "▸ Resetting permissions (Accessibility, Screen Recording)…"
 tccutil reset All "$BUNDLE" >/dev/null 2>&1 || true
 
-echo "▸ Removing app, preferences and saved state…"
+echo "▸ Removing app, preferences, saved state and app data…"
 rm -rf "$APP" "$LEGACY_APP"
 defaults delete "$BUNDLE" >/dev/null 2>&1 || true
 rm -f "$HOME/Library/Preferences/$BUNDLE.plist"
 rm -rf "$HOME/Library/Saved Application State/$BUNDLE.savedState"
+# Clipboard history, shelf files, captures and the share delete tokens live
+# here; the in-app uninstall takes them, so this path must not keep them.
+rm -rf "$HOME/Library/Application Support/$BUNDLE"
+rm -rf "$HOME/Library/Caches/$BUNDLE"
 
 RULES="/etc/sudoers.d/vorssaint-clamshell /etc/sudoers.d/vorssaint-utils-clamshell /etc/sudoers.d/vorss-clamshell"
 if ls $RULES >/dev/null 2>&1; then
