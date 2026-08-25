@@ -20,8 +20,9 @@ sleep 0.5
 
 # Detach from the system from inside whichever bundle still exists: unregisters
 # the login item (no BTM tombstone) and restores normal sleep.
-# A missing or unrunnable binary leaves the fan helper registered, and nothing
-# below can reach it: the registration lives in the system, not in the bundle.
+# The fan helper's registration lives in the system, not in the bundle, so
+# deleting the app below cannot reach it. Only the binary can drop it, and the
+# check after the loop settles what its absence or failure left behind.
 detached=1
 for candidate in "$APP/Contents/MacOS/Vorssaint" "$LEGACY_APP/Contents/MacOS/VorssaintUtils"; do
     if [[ -x "$candidate" ]]; then
@@ -30,6 +31,18 @@ for candidate in "$APP/Contents/MacOS/Vorssaint" "$LEGACY_APP/Contents/MacOS/Vor
         break
     fi
 done
+# `detached` cannot tell a failed unregister from no binary having run, and the
+# second is ordinary: an app trashed by hand, then this script for the rest. It
+# also cannot see a daemon that went despite a reported failure. launchctl
+# settles both without sudo, and still finds a registration held back for a
+# pending fan recovery, which is the one case that must keep warning.
+if (( detached )); then
+    launchctl print "system/$BUNDLE.fan-control" >/dev/null 2>&1
+    # 113 is "no such service", the only answer that proves absence. Any other
+    # failure means launchctl could not tell us, and warning then is the honest
+    # side of a check that exists to stop this script claiming what it cannot see.
+    (( $? == 113 )) && detached=0
+fi
 
 echo "▸ Resetting permissions (Accessibility, Screen Recording)…"
 tccutil reset All "$BUNDLE" >/dev/null 2>&1 || true
