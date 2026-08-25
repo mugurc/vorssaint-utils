@@ -16,7 +16,10 @@ enum Uninstaller {
         // The fan helper is a daemon service of its own, so unregistering the
         // main app as a login item never reaches it. Without this its root
         // registration outlives the bundle that carried its executable.
-        FanControlService.restoreAndUnregisterForRemoval()
+        let detached = FanControlService.restoreAndUnregisterForRemoval()
+        print(detached
+              ? "UNINSTALL: fan helper daemon unregistered"
+              : "UNINSTALL: fan helper daemon still registered")
         if UserDefaults.standard.bool(forKey: DefaultsKey.sleepDisabledFlag) {
             _ = Sudoers.pmsetDisableSleep(false)
         }
@@ -26,6 +29,9 @@ enum Uninstaller {
         } catch {
             print("UNINSTALL: login item was not registered")
         }
-        exit(0)
+        // Only the daemon decides the status. A login item that was never
+        // registered is not a failure; a daemon left behind is the one thing
+        // the caller cannot see for itself.
+        exit(detached ? EXIT_SUCCESS : EXIT_FAILURE)
     }
 }

@@ -20,10 +20,13 @@ sleep 0.5
 
 # Detach from the system from inside whichever bundle still exists: unregisters
 # the login item (no BTM tombstone) and restores normal sleep.
+# A missing or unrunnable binary leaves the fan helper registered, and nothing
+# below can reach it: the registration lives in the system, not in the bundle.
+detached=1
 for candidate in "$APP/Contents/MacOS/Vorssaint" "$LEGACY_APP/Contents/MacOS/VorssaintUtils"; do
     if [[ -x "$candidate" ]]; then
-        echo "▸ Detaching login item and restoring sleep…"
-        "$candidate" --uninstall || true
+        echo "▸ Detaching the fan helper and login item, restoring sleep…"
+        if "$candidate" --uninstall; then detached=0; fi
         break
     fi
 done
@@ -31,7 +34,7 @@ done
 echo "▸ Resetting permissions (Accessibility, Screen Recording)…"
 tccutil reset All "$BUNDLE" >/dev/null 2>&1 || true
 
-echo "▸ Removing app, preferences, saved state and app data…"
+echo "▸ Removing app, preferences, saved state and stored data (clipboard history, shelf files, share links)…"
 rm -rf "$APP" "$LEGACY_APP"
 defaults delete "$BUNDLE" >/dev/null 2>&1 || true
 rm -f "$HOME/Library/Preferences/$BUNDLE.plist"
@@ -40,6 +43,9 @@ rm -rf "$HOME/Library/Saved Application State/$BUNDLE.savedState"
 # here; the in-app uninstall takes them, so this path must not keep them.
 rm -rf "$HOME/Library/Application Support/$BUNDLE"
 rm -rf "$HOME/Library/Caches/$BUNDLE"
+# Written by URLSession on the app's behalf, so they exist without the app ever
+# naming the path; `defaults delete` does not reach them either.
+rm -rf "$HOME/Library/HTTPStorages/$BUNDLE" "$HOME/Library/HTTPStorages/$BUNDLE.binarycookies"
 
 RULES="/etc/sudoers.d/vorssaint-clamshell /etc/sudoers.d/vorssaint-utils-clamshell /etc/sudoers.d/vorss-clamshell"
 if ls $RULES >/dev/null 2>&1; then
@@ -47,4 +53,10 @@ if ls $RULES >/dev/null 2>&1; then
     osascript -e "do shell script \"rm -f $RULES\" with administrator privileges with prompt \"Vorssaint uninstaller\"" || true
 fi
 
-echo "✓ Vorssaint fully removed."
+if (( detached == 0 )); then
+    echo "✓ Vorssaint fully removed."
+else
+    echo "⚠ Vorssaint removed, but its fan helper is still registered with the system." >&2
+    echo "  Reinstall Vorssaint, then use Settings › Advanced to uninstall from inside the app." >&2
+    exit 1
+fi
